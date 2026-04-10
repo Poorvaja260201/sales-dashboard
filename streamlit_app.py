@@ -20,22 +20,25 @@ API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Inst
 
 def query_huggingface(prompt):
     headers = {
-        "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"
+        "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}",
+        "Content-Type": "application/json"
     }
 
     try:
         response = requests.post(
-    API_URL,
-    headers=headers,
-    json={
-        "inputs": prompt,
-        "parameters": {"max_new_tokens": 200}
-    }
-)
+            API_URL,
+            headers=headers,
+            json={
+                "inputs": prompt,
+                "parameters": {"max_new_tokens": 150}
+            }
+        )
 
+        if response.status_code == 410:
+            return "⚠️ AI is busy. Click again in 5 seconds."
 
         if response.status_code != 200:
-            return f"Error: {response.status_code}"
+            return f"⚠️ Error {response.status_code}"
 
         result = response.json()
 
@@ -45,8 +48,7 @@ def query_huggingface(prompt):
         return str(result)
 
     except Exception as e:
-        return f"Error: {str(e)}"
-
+        return f"⚠️ {str(e)}"
 
 def explain_results(prompt, data):
     full_prompt = f"""
@@ -59,7 +61,6 @@ def explain_results(prompt, data):
     """
 
     return query_huggingface(full_prompt)
-
 # -----------------------
 # SESSION MEMORY
 # -----------------------
@@ -147,23 +148,45 @@ st.write(f"🏆 Top Product: {top_product}")
 # AI INSIGHTS
 # -----------------------
 
-st.subheader("🤖 AI Insights")
+st.subheader("Insights")
 
-question = st.text_input("Ask a business question")
+question_options = [
+    "What is total revenue?",
+    "Which product generates the most revenue?",
+    "What is the profit trend?",
+    "Which country performs best?",
+    "What are the top 5 products?",
+    "How does revenue change month by month?",
+    "Is there any sales drop recently?",
+    "How does Q1 revenue look?",
+    "How does Q2 revenue look?",
+    "How does Q3 revenue look?",
+    "How does Q4 revenue look?",
+    "Compare revenue across all quarters"
+]
+
+selected_question = st.selectbox(
+    "Choose a business question",
+    question_options
+)
+
+custom_question = st.text_input("Or type your own question")
+
+final_question = custom_question if custom_question else selected_question
 
 if st.button("Generate Insights"):
 
     grouped_data = filtered_df.groupby(['Country','Product']).sum(numeric_only=True)
 
     result = explain_results(
-        question,
+        final_question,
         grouped_data.to_string()
     )
 
-    if "Error" in result:
-        st.error(result)
+    if "⚠️" in result:
+        st.warning(result)
     else:
-        st.success("Insights generated!")
+        st.success("Insights generated successfully!")
         st.write(result)
 
 # -----------------------
