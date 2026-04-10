@@ -9,10 +9,10 @@ from modules.sql_executor import run_sql
 from modules.llama_explainer import ask_llama
 import sys
 import os
-
 sys.path.append(os.path.abspath("modules"))
-
 from smart_ai import smart_ai_analyst
+
+
 
 # -----------------------
 # HUGGING FACE SETUP
