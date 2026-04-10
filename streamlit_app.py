@@ -20,8 +20,8 @@ from smart_ai import smart_ai_analyst
 
 API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
 
-headers = {
-    "Authorization": f"Bearer {st.secrets['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']}"
+    headers = {
+    "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"
 }
 
 def explain_results(prompt, data):
