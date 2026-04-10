@@ -154,7 +154,7 @@ if st.button("Why is revenue down in Q4?", key="llama_btn"):
 # AI CHAT (WITH MEMORY)
 # -----------------------
 
-st.subheader("💬 Ask AI Analyst (NL → SQL + AI)")
+st.subheader("💬 Ask AI Analyst ")
 
 user_input = st.text_input("Ask a business question:")
 
@@ -206,4 +206,20 @@ if user_input:
 # -----------------------
 st.subheader("🏆 Top 5 Products")
 
-st.dataframe(top_5_products(filtered_df))
+def top_5_products(df):
+    df = df.copy()
+    df["Product_clean"] = df["Product"].str.split(",").str[0]
+
+    return (
+        df.groupby("Product_clean")["Revenue"]
+        .sum()
+        .sort_values(ascending=False)
+        .reset_index()
+        .head(5)
+    )
+
+top_products = top_5_products(filtered_df)
+
+st.bar_chart(
+    top_products.set_index("Product_clean")["Revenue"]
+)
