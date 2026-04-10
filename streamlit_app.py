@@ -3,6 +3,7 @@ import streamlit as st
 import plotly.express as px
 import requests
 from io import BytesIO
+from modules.smart_ai import smart_ai_analyst
 
 from modules.ai_insights import generate_insights
 from modules.sql_generator import generate_sql
@@ -16,7 +17,7 @@ from modules.llama_explainer import ask_llama
 API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
 
 headers = {
-    "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"
+    "Authorization": f"Bearer {st.secrets['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']}"
 }
 
 def explain_results(prompt, data):
@@ -171,16 +172,40 @@ st.write(detect_sales_drop(filtered_df))
 
 st.subheader("🤖 AI Insights")
 
-user_question = st.text_input("Ask something about your data")
+question_options = [
+    "What is total revenue?",
+    "Which product generates the most revenue?",
+    "What is the profit trend?",
+    "Which country performs best?",
+    "What are the top 5 products?",
+    "How does revenue change month by month?",
+    "Is there any sales drop recently?",
+
+    # 👇 QUARTER QUESTIONS
+    "How does Q1 revenue look?",
+    "How does Q2 revenue look?",
+    "How does Q3 revenue look?",
+    "How does Q4 revenue look?",
+    "Compare revenue across all quarters"
+]
+
+selected_question = st.selectbox(
+    "Choose a business question",
+    question_options
+)
+
+custom_question = st.text_input("Or type your own question")
+
+final_question = custom_question if custom_question else selected_question
 
 if st.button("Generate Insights"):
-    if user_question:
-        result = explain_results(
-            user_question,
-            filtered_df.head(10).to_string()
-        )
-        st.success("Insights generated successfully!")
-        st.write(result)
+    result = explain_results(
+        final_question,
+        filtered_df.groupby(['Country','Product']).sum().to_string()
+    )
+
+    st.success("Insights generated successfully!")
+    st.write(result)
 
 
 # -----------------------
@@ -230,9 +255,34 @@ if user_input:
             st.write("### 🤖 AI Explanation")
             st.write(explanation)
 
-        else:
-            st.write("❌ Sorry, I don’t understand that question yet.")
+       from modules.smart_ai import smart_ai_analyst
 
+sql_query = generate_sql(user_input)
+
+if sql_query:
+    result = run_sql(sql_query)
+
+    st.session_state.last_question = user_input
+    st.session_state.last_result = result
+
+    st.write("### 📊 Query Result")
+    st.dataframe(result)
+
+    with st.spinner("Analyzing results..."):
+        explanation = explain_results(
+            user_input,
+            result.head(10).to_string()
+        )
+
+    st.write("### 🤖 AI Explanation")
+    st.write(explanation)
+
+else:
+    # 🔥 fallback to smart AI
+    answer = smart_ai_analyst(user_input, df)
+
+    st.write("### 🤖 Smart AI Answer")
+    st.success(answer)
 # -----------------------
 # TOP PRODUCTS
 # -----------------------
