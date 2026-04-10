@@ -254,7 +254,7 @@ if user_input:
             st.write("### 🤖 AI Explanation")
             st.write(explanation)
 
-       from modules.smart_ai import smart_ai_analyst
+       
 
 sql_query = generate_sql(user_input)
 
