@@ -3,16 +3,14 @@ import streamlit as st
 import plotly.express as px
 import requests
 from io import BytesIO
-from modules.ai_insights import generate_insights
-from modules.sql_generator import generate_sql
-from modules.sql_executor import run_sql
-from modules.llama_explainer import ask_llama
 import sys
 import os
+
 sys.path.append(os.path.abspath("modules"))
+
+from modules.sql_generator import generate_sql
+from modules.sql_executor import run_sql
 from smart_ai import smart_ai_analyst
-
-
 
 # -----------------------
 # HUGGING FACE SETUP
@@ -20,38 +18,43 @@ from smart_ai import smart_ai_analyst
 
 API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
 
+def query_huggingface(prompt):
     headers = {
-    "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"
-}
+        "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"
+    }
 
-def explain_results(prompt, data):
     try:
-        full_prompt = f"""
-        You are a business data analyst.
-
-        Question: {prompt}
-        Data: {data}
-
-        Give 2-3 short business insights.
-        """
-
         response = requests.post(
             API_URL,
             headers=headers,
-            json={"inputs": full_prompt}
+            json={"inputs": prompt}
         )
 
-        output = response.json()
+        if response.status_code != 200:
+            return f"Error: {response.status_code}"
 
-        if isinstance(output, list):
-            return output[0].get("generated_text", "No response")
-        elif isinstance(output, dict) and "error" in output:
-            return f"⚠️ {output['error']}"
-        else:
-            return str(output)
+        result = response.json()
 
-    except Exception:
-        return "⚠️ AI insights temporarily unavailable."
+        if isinstance(result, list):
+            return result[0].get("generated_text", "No response")
+
+        return str(result)
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+def explain_results(prompt, data):
+    full_prompt = f"""
+    You are a business data analyst.
+
+    Question: {prompt}
+    Data: {data}
+
+    Give 2-3 short business insights.
+    """
+
+    return query_huggingface(full_prompt)
 
 # -----------------------
 # SESSION MEMORY
@@ -93,70 +96,36 @@ selected_country = st.sidebar.selectbox(
 
 filtered_df = df[df['Country'] == selected_country]
 
-# Download button
+# Download
 output = BytesIO()
 filtered_df.to_excel(output, index=False, engine='openpyxl')
-excel_data = output.getvalue()
 
 st.download_button(
-    label="📥 Download Excel File",
-    data=excel_data,
-    file_name="sales_data.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "📥 Download Excel",
+    data=output.getvalue(),
+    file_name="sales.xlsx"
 )
 
 # -----------------------
 # METRICS
 # -----------------------
 
-def total_revenue(data):
-    return f"${data['Revenue'].sum():,}"
-
-def total_profit(data):
-    return f"${data['Profit'].sum():,}"
-
-def top_product(data):
-    return data.groupby('Product')['Revenue'].sum().idxmax()
-
-def detect_sales_drop(data):
-    trend = data.groupby(['Year', 'Month'])['Revenue'].sum().pct_change().dropna()
-    if len(trend) == 0:
-        return "Not enough data"
-
-    latest = trend.iloc[-1]
-    return f"{'📉 Drop' if latest < 0 else '📈 Growth'}: {round(latest*100,2)}%"
-
-def simple_forecast(data):
-    trend = data.groupby(['Year', 'Month'])['Revenue'].sum()
-    return trend.tail(3).mean() if len(trend) > 0 else 0
-
-# -----------------------
-# DASHBOARD
-# -----------------------
-
 st.subheader("📊 Key Metrics")
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Revenue", total_revenue(filtered_df))
-col2.metric("Profit", total_profit(filtered_df))
-col3.metric("Orders", f"{len(filtered_df):,}")
-col4.metric("Forecast", f"${simple_forecast(filtered_df):,.0f}")
+col1.metric("Revenue", f"${filtered_df['Revenue'].sum():,.0f}")
+col2.metric("Profit", f"${filtered_df['Profit'].sum():,.0f}")
+col3.metric("Orders", len(filtered_df))
+col4.metric("Avg Revenue", f"${filtered_df['Revenue'].mean():,.0f}")
 
 # -----------------------
 # CHART
 # -----------------------
 
-st.subheader("📈 Monthly Sales Trend")
-
-month_order = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December'
-]
+st.subheader("📈 Monthly Trend")
 
 trend = filtered_df.groupby('Month')['Revenue'].sum().reset_index()
-trend['Month'] = pd.Categorical(trend['Month'], categories=month_order, ordered=True)
-trend = trend.sort_values('Month')
 
 fig = px.line(trend, x='Month', y='Revenue', markers=True)
 st.plotly_chart(fig, use_container_width=True)
@@ -167,8 +136,8 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("📊 Quick Insights")
 
-st.write(f"🏆 Top Product: {top_product(filtered_df)}")
-st.write(detect_sales_drop(filtered_df))
+top_product = filtered_df.groupby('Product')['Revenue'].sum().idxmax()
+st.write(f"🏆 Top Product: {top_product}")
 
 # -----------------------
 # AI INSIGHTS
@@ -176,137 +145,66 @@ st.write(detect_sales_drop(filtered_df))
 
 st.subheader("🤖 AI Insights")
 
-question_options = [
-    "What is total revenue?",
-    "Which product generates the most revenue?",
-    "What is the profit trend?",
-    "Which country performs best?",
-    "What are the top 5 products?",
-    "How does revenue change month by month?",
-    "Is there any sales drop recently?",
-
-    # 👇 QUARTER QUESTIONS
-    "How does Q1 revenue look?",
-    "How does Q2 revenue look?",
-    "How does Q3 revenue look?",
-    "How does Q4 revenue look?",
-    "Compare revenue across all quarters"
-]
-
-selected_question = st.selectbox(
-    "Choose a business question",
-    question_options
-)
-
-custom_question = st.text_input("Or type your own question")
-
-final_question = custom_question if custom_question else selected_question
+question = st.text_input("Ask a business question")
 
 if st.button("Generate Insights"):
+
+    grouped_data = filtered_df.groupby(['Country','Product']).sum(numeric_only=True)
+
     result = explain_results(
-        final_question,
-        filtered_df.groupby(['Country','Product']).sum().to_string()
+        question,
+        grouped_data.to_string()
     )
 
-    st.success("Insights generated successfully!")
-    st.write(result)
-
+    if "Error" in result:
+        st.error(result)
+    else:
+        st.success("Insights generated!")
+        st.write(result)
 
 # -----------------------
-# AI CHAT (WITH MEMORY)
+# AI CHAT
 # -----------------------
 
 st.subheader("💬 Ask AI Analyst")
 
-user_input = st.text_input("Ask a business question:")
+user_input = st.text_input("Ask anything:")
 
 if user_input:
 
-    if user_input.lower() in ["why", "explain", "why is that"]:
+    sql_query = generate_sql(user_input)
 
-        if st.session_state.last_result is not None:
+    if sql_query:
+        result = run_sql(sql_query)
 
-            with st.spinner("Analyzing previous result..."):
-                explanation = explain_results(
-                    st.session_state.last_question,
-                    st.session_state.last_result.head(10).to_string()
-                )
+        st.session_state.last_question = user_input
+        st.session_state.last_result = result
 
-            st.write("### 🤖 AI Explanation")
-            st.write(explanation)
+        st.dataframe(result)
 
-        else:
-            st.write("⚠️ Ask a question first.")
-
-    else:
-        sql_query = generate_sql(user_input)
-
-        if sql_query:
-            result = run_sql(sql_query)
-
-            st.session_state.last_question = user_input
-            st.session_state.last_result = result
-
-            st.write("### 📊 Query Result")
-            st.dataframe(result)
-
-            with st.spinner("Analyzing results..."):
-                explanation = explain_results(
-                    user_input,
-                    result.head(10).to_string()
-                )
-
-            st.write("### 🤖 AI Explanation")
-            st.write(explanation)
-
-       
-
-sql_query = generate_sql(user_input)
-
-if sql_query:
-    result = run_sql(sql_query)
-
-    st.session_state.last_question = user_input
-    st.session_state.last_result = result
-
-    st.write("### 📊 Query Result")
-    st.dataframe(result)
-
-    with st.spinner("Analyzing results..."):
         explanation = explain_results(
             user_input,
             result.head(10).to_string()
         )
 
-    st.write("### 🤖 AI Explanation")
-    st.write(explanation)
+        st.write("### 🤖 Explanation")
+        st.write(explanation)
 
-else:
-    # 🔥 fallback to smart AI
-    answer = smart_ai_analyst(user_input, df)
+    else:
+        answer = smart_ai_analyst(user_input, filtered_df)
+        st.success(answer)
 
-    st.write("### 🤖 Smart AI Answer")
-    st.success(answer)
 # -----------------------
 # TOP PRODUCTS
 # -----------------------
 
 st.subheader("🏆 Top 5 Products")
 
-def top_5_products(df):
-    df = df.copy()
-    df["Product_clean"] = df["Product"].str.split(",").str[0]
-
-    return (
-        df.groupby("Product_clean")["Revenue"]
-        .sum()
-        .sort_values(ascending=False)
-        .reset_index()
-        .head(5)
-    )
-
-top_products = top_5_products(filtered_df)
-
-st.bar_chart(
-    top_products.set_index("Product_clean")["Revenue"]
+top_products = (
+    filtered_df.groupby("Product")["Revenue"]
+    .sum()
+    .sort_values(ascending=False)
+    .head(5)
 )
+
+st.bar_chart(top_products)
