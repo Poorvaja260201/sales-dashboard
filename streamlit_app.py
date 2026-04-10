@@ -175,7 +175,7 @@ if st.button("Generate Insights"):
     grouped_data = filtered_df.groupby(['Country','Product']).sum(numeric_only=True)
 
     result = explain_results(
-        selected_question,,
+        selected_question,
         grouped_data.to_string()
     )
 
