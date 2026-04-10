@@ -182,15 +182,6 @@ if st.button("Generate Insights"):
         st.success("Insights generated successfully!")
         st.write(result)
 
-# -----------------------
-# LLAMA
-# -----------------------
-
-st.subheader("🧠 Ask LLaMA")
-
-if st.button("Why is revenue down in Q4?", key="llama_btn"):
-    answer = ask_llama("Why is revenue down in Q4?")
-    st.write(answer)
 
 # -----------------------
 # AI CHAT (WITH MEMORY)
