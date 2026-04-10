@@ -2,14 +2,54 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import requests
-from modules.ai_explainer import explain_results
+from io import BytesIO
+
 from modules.ai_insights import generate_insights
 from modules.sql_generator import generate_sql
 from modules.sql_executor import run_sql
 from modules.llama_explainer import ask_llama
 
 # -----------------------
-# CHAT MEMORY
+# HUGGING FACE SETUP
+# -----------------------
+
+API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+
+headers = {
+    "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"
+}
+
+def explain_results(prompt, data):
+    try:
+        full_prompt = f"""
+        You are a business data analyst.
+
+        Question: {prompt}
+        Data: {data}
+
+        Give 2-3 short business insights.
+        """
+
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            json={"inputs": full_prompt}
+        )
+
+        output = response.json()
+
+        if isinstance(output, list):
+            return output[0].get("generated_text", "No response")
+        elif isinstance(output, dict) and "error" in output:
+            return f"⚠️ {output['error']}"
+        else:
+            return str(output)
+
+    except Exception:
+        return "⚠️ AI insights temporarily unavailable."
+
+# -----------------------
+# SESSION MEMORY
 # -----------------------
 
 if "last_question" not in st.session_state:
@@ -17,16 +57,18 @@ if "last_question" not in st.session_state:
 
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
+
 # -----------------------
 # PAGE CONFIG
 # -----------------------
-st.set_page_config(page_title="Sales AI Assistant", layout="wide")
 
+st.set_page_config(page_title="Sales AI Assistant", layout="wide")
 st.title("📊 Sales Analytics Assistant")
 
 # -----------------------
 # LOAD DATA
 # -----------------------
+
 df = pd.read_csv("data/sales_data.csv")
 
 df['Date'] = pd.to_datetime(df['Date'])
@@ -36,6 +78,7 @@ df['Year'] = df['Date'].dt.year
 # -----------------------
 # SIDEBAR
 # -----------------------
+
 st.sidebar.header("Filters")
 
 selected_country = st.sidebar.selectbox(
@@ -45,7 +88,7 @@ selected_country = st.sidebar.selectbox(
 
 filtered_df = df[df['Country'] == selected_country]
 
-from io import BytesIO
+# Download button
 output = BytesIO()
 filtered_df.to_excel(output, index=False, engine='openpyxl')
 excel_data = output.getvalue()
@@ -58,8 +101,9 @@ st.download_button(
 )
 
 # -----------------------
-# METRIC FUNCTIONS
+# METRICS
 # -----------------------
+
 def total_revenue(data):
     return f"${data['Revenue'].sum():,}"
 
@@ -77,17 +121,14 @@ def detect_sales_drop(data):
     latest = trend.iloc[-1]
     return f"{'📉 Drop' if latest < 0 else '📈 Growth'}: {round(latest*100,2)}%"
 
-def top_5_products(data):
-    return data.groupby('Product')['Revenue'].sum().sort_values(ascending=False).head(5)
-
 def simple_forecast(data):
     trend = data.groupby(['Year', 'Month'])['Revenue'].sum()
     return trend.tail(3).mean() if len(trend) > 0 else 0
 
+# -----------------------
+# DASHBOARD
+# -----------------------
 
-# -----------------------
-# DASHBOARD SECTION
-# -----------------------
 st.subheader("📊 Key Metrics")
 
 col1, col2, col3, col4 = st.columns(4)
@@ -97,10 +138,10 @@ col2.metric("Profit", total_profit(filtered_df))
 col3.metric("Orders", f"{len(filtered_df):,}")
 col4.metric("Forecast", f"${simple_forecast(filtered_df):,.0f}")
 
-
 # -----------------------
 # CHART
 # -----------------------
+
 st.subheader("📈 Monthly Sales Trend")
 
 month_order = [
@@ -115,60 +156,60 @@ trend = trend.sort_values('Month')
 fig = px.line(trend, x='Month', y='Revenue', markers=True)
 st.plotly_chart(fig, use_container_width=True)
 
+# -----------------------
+# QUICK INSIGHTS
+# -----------------------
 
-# -----------------------
-# INSIGHTS
-# -----------------------
 st.subheader("📊 Quick Insights")
 
 st.write(f"🏆 Top Product: {top_product(filtered_df)}")
 st.write(detect_sales_drop(filtered_df))
 
+# -----------------------
+# AI INSIGHTS
+# -----------------------
 
-# -----------------------
-# AI INSIGHTS BUTTON
-# -----------------------
 st.subheader("🤖 AI Insights")
 
-if st.button("Generate AI Insights", key="ai_insights_btn"):
-    insights = generate_insights(df, selected_country)
+user_question = st.text_input("Ask something about your data")
 
-    for i in insights:
-        st.write(f"• {i}")
-
+if st.button("Generate Insights"):
+    if user_question:
+        result = explain_results(
+            user_question,
+            filtered_df.head(10).to_string()
+        )
+        st.success("Insights generated successfully!")
+        st.write(result)
 
 # -----------------------
-# LLaMA QUICK ASK
+# LLAMA
 # -----------------------
+
 st.subheader("🧠 Ask LLaMA")
 
 if st.button("Why is revenue down in Q4?", key="llama_btn"):
     answer = ask_llama("Why is revenue down in Q4?")
     st.write(answer)
 
-
-# -----------------------
-# MAIN AI CHAT (BEST PART 🔥)
-# -----------------------
 # -----------------------
 # AI CHAT (WITH MEMORY)
 # -----------------------
 
-st.subheader("💬 Ask AI Analyst ")
+st.subheader("💬 Ask AI Analyst")
 
 user_input = st.text_input("Ask a business question:")
 
 if user_input:
 
-    # 🔥 HANDLE FOLLOW-UP QUESTION
     if user_input.lower() in ["why", "explain", "why is that"]:
-        
+
         if st.session_state.last_result is not None:
 
             with st.spinner("Analyzing previous result..."):
                 explanation = explain_results(
                     st.session_state.last_question,
-                    st.session_state.last_result
+                    st.session_state.last_result.head(10).to_string()
                 )
 
             st.write("### 🤖 AI Explanation")
@@ -178,22 +219,22 @@ if user_input:
             st.write("⚠️ Ask a question first.")
 
     else:
-        # Normal flow
         sql_query = generate_sql(user_input)
 
         if sql_query:
             result = run_sql(sql_query)
 
-            # Save memory
             st.session_state.last_question = user_input
             st.session_state.last_result = result
 
             st.write("### 📊 Query Result")
             st.dataframe(result)
 
-            # Auto explanation
             with st.spinner("Analyzing results..."):
-                explanation = explain_results(user_input, result)
+                explanation = explain_results(
+                    user_input,
+                    result.head(10).to_string()
+                )
 
             st.write("### 🤖 AI Explanation")
             st.write(explanation)
@@ -202,8 +243,9 @@ if user_input:
             st.write("❌ Sorry, I don’t understand that question yet.")
 
 # -----------------------
-# TOP PRODUCTS TABLE
+# TOP PRODUCTS
 # -----------------------
+
 st.subheader("🏆 Top 5 Products")
 
 def top_5_products(df):
