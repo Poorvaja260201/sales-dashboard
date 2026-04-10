@@ -16,7 +16,7 @@ from smart_ai import smart_ai_analyst
 # HUGGING FACE SETUP
 # -----------------------
 
-API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
 
 def query_huggingface(prompt):
     headers = {
@@ -25,10 +25,14 @@ def query_huggingface(prompt):
 
     try:
         response = requests.post(
-            API_URL,
-            headers=headers,
-            json={"inputs": prompt}
-        )
+    API_URL,
+    headers=headers,
+    json={
+        "inputs": prompt,
+        "parameters": {"max_new_tokens": 200}
+    }
+)
+
 
         if response.status_code != 200:
             return f"Error: {response.status_code}"
