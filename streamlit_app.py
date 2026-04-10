@@ -170,16 +170,12 @@ selected_question = st.selectbox(
     question_options
 )
 
-custom_question = st.text_input("Or type your own question")
-
-final_question = custom_question if custom_question else selected_question
-
 if st.button("Generate Insights"):
 
     grouped_data = filtered_df.groupby(['Country','Product']).sum(numeric_only=True)
 
     result = explain_results(
-        final_question,
+        selected_question,,
         grouped_data.to_string()
     )
 
