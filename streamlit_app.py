@@ -119,6 +119,15 @@ st.subheader("📈 Monthly Trend")
 
 trend = filtered_df.groupby('Month')['Revenue'].sum().reset_index()
 
+# ✅ FIX: correct month order
+month_order = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+]
+
+trend["Month"] = pd.Categorical(trend["Month"], categories=month_order, ordered=True)
+trend = trend.sort_values("Month")
+
 fig = px.line(trend, x='Month', y='Revenue', markers=True)
 st.plotly_chart(fig, use_container_width=True)
 
