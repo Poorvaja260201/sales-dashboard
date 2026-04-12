@@ -13,42 +13,25 @@ from modules.sql_executor import run_sql
 from smart_ai import smart_ai_analyst
 
 # -----------------------
-# HUGGING FACE SETUP
+# GROQ SETUP
 # -----------------------
+from groq import Groq
 
-API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 def query_huggingface(prompt):
-    headers = {
-        "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}",
-        "Content-Type": "application/json"
-    }
-
     try:
-        response = requests.post(
-            API_URL,
-            headers=headers,
-            json={
-                "inputs": prompt,
-                "parameters": {"max_new_tokens": 150}
-            }
+        chat_completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": "You are a smart business data analyst."},
+                {"role": "user", "content": prompt}
+            ],
         )
-
-        if response.status_code == 410:
-            return "⚠️ AI is busy. Click again in 5 seconds."
-
-        if response.status_code != 200:
-            return f"⚠️ Error {response.status_code}"
-
-        result = response.json()
-
-        if isinstance(result, list):
-            return result[0].get("generated_text", "No response")
-
-        return str(result)
-
+        return chat_completion.choices[0].message.content
     except Exception as e:
         return f"⚠️ {str(e)}"
+
 
 def explain_results(prompt, data):
     full_prompt = f"""
@@ -60,7 +43,11 @@ def explain_results(prompt, data):
     Give 2-3 short business insights.
     """
 
-    return query_huggingface(full_prompt)
+    try:
+        return query_huggingface(full_prompt)
+    except Exception as e:
+        return f"⚠️ {str(e)}"
+
 # -----------------------
 # SESSION MEMORY
 # -----------------------
@@ -136,16 +123,7 @@ fig = px.line(trend, x='Month', y='Revenue', markers=True)
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------
-# QUICK INSIGHTS
-# -----------------------
-
-st.subheader("📊 Quick Insights")
-
-top_product = filtered_df.groupby('Product')['Revenue'].sum().idxmax()
-st.write(f"🏆 Top Product: {top_product}")
-
-# -----------------------
-# AI INSIGHTS
+# AI INSIGHTS (1)
 # -----------------------
 
 st.subheader("Insights")
@@ -167,23 +145,24 @@ question_options = [
 
 selected_question = st.selectbox(
     "Choose a business question",
-    question_options
+    question_options,
+    key="insights_1"
 )
 
-if st.button("Generate Insights"):
+final_question = selected_question  # 👈 only dropdown now
+
+if st.button("Generate Insights", key="btn_1"):
 
     grouped_data = filtered_df.groupby(['Country','Product']).sum(numeric_only=True)
 
-    result = explain_results(
-        selected_question,
-        grouped_data.to_string()
-    )
+    result = explain_results(final_question, grouped_data.to_string())
 
     if "⚠️" in result:
         st.warning(result)
     else:
         st.success("Insights generated successfully!")
         st.write(result)
+
 
 # -----------------------
 # AI CHAT
