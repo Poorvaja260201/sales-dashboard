@@ -177,8 +177,6 @@ if st.button("Generate Insights", key="btn_1"):
 # AI CHAT
 # -----------------------
 
-st.subheader("💬 Ask AI Analyst")
-
 user_input = st.text_input("Ask anything:")
 
 if user_input:
@@ -186,6 +184,23 @@ if user_input:
     sql_query = generate_sql(user_input)
 
     if sql_query:
+
+        # Normalize for safety
+        query_lower = sql_query.lower()
+
+        if "where" in query_lower:
+            sql_query = sql_query.replace(
+                "WHERE",
+                f"WHERE Country = '{selected_country}' AND"
+            )
+        else:
+            sql_query = sql_query.replace(
+                "FROM sales",
+                f"FROM sales WHERE Country = '{selected_country}'"
+            )
+
+        st.write("🔍 Final SQL:", sql_query)  # 👈 DEBUG (optional)
+
         result = run_sql(sql_query)
 
         st.session_state.last_question = user_input
