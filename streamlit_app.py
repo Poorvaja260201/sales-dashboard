@@ -173,10 +173,6 @@ if st.button("Generate Insights", key="btn_1"):
         st.write(result)
 
 
-# -----------------------
-# AI CHAT
-# -----------------------
-
 user_input = st.text_input("Ask anything:")
 
 if user_input:
@@ -185,7 +181,6 @@ if user_input:
 
     if sql_query:
 
-        # Normalize for safety
         query_lower = sql_query.lower()
 
         if "where" in query_lower:
@@ -198,8 +193,6 @@ if user_input:
                 "FROM sales",
                 f"FROM sales WHERE Country = '{selected_country}'"
             )
-
-        st.write("🔍 Final SQL:", sql_query)  # 👈 DEBUG (optional)
 
         result = run_sql(sql_query)
 
